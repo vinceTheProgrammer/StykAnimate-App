@@ -7,8 +7,10 @@
   Opens Pivot (<code>.piv</code>, <code>.stk</code>) and Stick Nodes projects, and keeps your work on your device.
 </p>
 
-This is a fork of the official upstream project, which can be found at: filippocalippo/StykAnimate-App
+This is a fork of the official upstream project, which can be found at: [filippocalippo/StykAnimate-App](https://github.com/filippocalippo/StykAnimate-App)
 Make sure to show your support to the official release!
+
+The goal of this fork is to replace Styk's Electron foundation entirely with Tauri to make native mobile builds possible.
 
 ## License
 
