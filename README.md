@@ -1,23 +1,42 @@
-<p align="center">
-  <img src="assets/brand/svg/stykanimate-horizontal-primary.svg" alt="StykAnimate" width="420">
-</p>
-
-<p align="center">
-  A free, open-source stick figure animation app for Windows, Linux and the browser.<br>
-  Opens Pivot (<code>.piv</code>, <code>.stk</code>) and Stick Nodes projects, and keeps your work on your device.
-</p>
-
 This is a fork of the official upstream project, which can be found at: [filippocalippo/StykAnimate-App](https://github.com/filippocalippo/StykAnimate-App)
 Make sure to show your support to the official release!
 
 The goal of this fork is to replace Styk's Electron foundation entirely with Tauri to make native mobile builds possible.
 
-## License
+So far no native functionality has been ported, but the Styk **web** version runs successfully on Tauri. See the instructions below on how to try it.
 
-StykAnimate is free software: you can redistribute it and/or modify it under the terms of the [GNU General Public License](LICENSE), version 3 or (at your option) any later version. Bundled third-party components keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+## Prerequisites
+1. Install Rust
+2. Install Node.js 22 or higher
+3. Install [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/)
+4. Install [Taui CLI](https://v2.tauri.app/reference/cli/) (I prefer installing the Tauri CLI using Cargo, and that's what I use in the commands below, but you can install however you prefer and substibute the beginning of the command invocation).
+5. If you want to build for mobile targets, follow [Tauri's instructions for configuring for mobile targets](https://v2.tauri.app/start/prerequisites/#configure-for-mobile-targets).
+6. Clone this repo
+7. Navigate to the root of the repo in your terminal before executing the commands below (replace `cargo tauri` with whatever tauri cli you installed)
 
-## Trademarks
+## Run Styk Web Version on Tauri (Desktop)
+```
+npm ci
+npm run web:build
+cargo tauri dev
+```
 
-The StykAnimate name and logo identify the official project. The GPL lets you fork and redistribute the code, but please give modified versions a different name and icon so people can tell them apart from official releases.
+## Run Styk Web Version on Tauri (Android)
+```
+npm ci
+npm run web:build
+cargo tauri android init
+```
 
-StykAnimate is an independent project. It is not affiliated with or endorsed by Pivot Animator or Stick Nodes; those names are used only to describe file compatibility.
+Make sure to connect your Android device via adb, then run:
+```
+cargo tauri android run
+```
+
+## Run Styk Web Version on Tauri (iOS) *UNTESTED!
+```
+npm ci
+npm run web:build
+cargo tauri ios init
+cargo tauri ios dev
+```
