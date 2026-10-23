@@ -5,6 +5,8 @@ The goal of this fork is to replace Styk's Electron foundation entirely with Tau
 
 So far no native functionality has been ported, but the Styk **web** version runs successfully on Tauri. See the instructions below on how to try it.
 
+⚠️ Experimental and simply runs the web version of Styk in a Tauri native application, so native integration will NOT be good. You will get about the same experience as using it in your browser, depending on the webview shipped with your device. I did notice that on my Android device WebGPU rendering works via the Tauri application but not my browser, so that could be an advantage, but this probably differs device to device (for example on my Arch Linux desktop, Styk on Tauri falls back to the Canvas2D renderer). ⚠️
+
 ## Prerequisites
 1. Install Rust
 2. Install Node.js 22 or higher
@@ -40,3 +42,5 @@ npm run web:build
 cargo tauri ios init
 cargo tauri ios dev
 ```
+
+To build instead of run, see the [tauri cli reference](https://v2.tauri.app/reference/cli/#list-of-commands) for the correct commands. Generally it seems to be that you replace "dev" or "run" with "build".
