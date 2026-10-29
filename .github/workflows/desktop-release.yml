@@ -1,13 +1,14 @@
 name: Build and verify release
+
 on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish the verified Windows and Linux release
+        description: Publish the verified Windows and Linux release to this repository
         type: boolean
         default: false
       upload_draft:
-        description: Upload a verified draft to the public assets repository
+        description: Upload a verified draft GitHub Release to this repository
         type: boolean
         default: false
       verify_windows_run:
@@ -20,14 +21,18 @@ on:
         default: false
   push:
     tags: ['v*']
+
 permissions:
   contents: read
+
 concurrency:
   group: desktop-release
   cancel-in-progress: false
+
 defaults:
   run:
     shell: bash
+
 jobs:
   desktop:
     if: inputs.verify_windows_run == ''
@@ -46,31 +51,37 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '24.11.0'
           cache: npm
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12.9'
           cache: pip
           cache-dependency-path: scripts/requirements-build.txt
+
       - name: Install locked dependencies
         run: |
           npm ci --no-audit --no-fund
           python -m pip install -r scripts/requirements-build.txt
+
       - name: Prepare Linux display
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y xvfb
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Validate release and source
         run: |
           npm run changelog:check
           npm run check
           npm test
           python -m unittest discover -s backend -p 'test_*.py'
+
       - name: Build standalone codecs and video encoder
         run: |
           npm run build:frame-scan
@@ -78,6 +89,7 @@ jobs:
           npm run build:sidecar
           npm run verify:sidecar
           npm run build:video-encoder
+
       - name: Package the release
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -93,6 +105,7 @@ jobs:
             echo "STYK_PACKAGED_RESOURCES=$GITHUB_WORKSPACE/release/$version/linux-unpacked/resources" >> "$GITHUB_ENV"
             echo "STYK_PACKAGED_EXECUTABLE=$GITHUB_WORKSPACE/release/$version/linux-unpacked/stykanimate" >> "$GITHUB_ENV"
           fi
+
       - name: Verify exact packaged files and desktop behavior
         run: |
           npm run verify:package
@@ -105,6 +118,7 @@ jobs:
             STYK_PACKAGED_EXECUTABLE="$GITHUB_WORKSPACE/release/$version/StykAnimate-$version-linux-x86_64.AppImage" xvfb-run -a npm run test:boot:packaged
             xvfb-run -a npm run test:updates:linux
           fi
+
       - name: Upload release assets
         uses: actions/upload-artifact@v4
         with:
@@ -116,9 +130,11 @@ jobs:
             release/${{ env.RELEASE_VERSION }}/*.AppImage
           retention-days: 30
           if-no-files-found: error
+
       - name: Install and upgrade the actual Windows release
         if: runner.os == 'Windows'
         run: node scripts/verify-release-install.mjs
+
       - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -131,9 +147,11 @@ jobs:
             artifacts/updates/appimage-smoke.json
             artifacts/release-install/evidence.json
           retention-days: 30
+
   web:
     if: inputs.verify_windows_run == ''
     uses: ./.github/workflows/web-verify.yml
+
   windows-upgrade:
     name: Verify retained Windows installer
     if: github.event_name == 'workflow_dispatch' && inputs.verify_windows_run != ''
@@ -147,20 +165,24 @@ jobs:
       VERIFY_PUBLIC_FEED: ${{ inputs.verify_public_feed }}
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '24.11.0'
           cache: npm
+
       - name: Install locked verification dependencies
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           echo "RELEASE_VERSION=$(node -p 'JSON.parse(require("fs").readFileSync("package.json")).version')" >> "$GITHUB_ENV"
+
       - uses: actions/download-artifact@v4
         with:
           name: release-assets-win32
           run-id: ${{ inputs.verify_windows_run }}
           github-token: ${{ github.token }}
           path: release/${{ env.RELEASE_VERSION }}
+
       - name: Verify the retained assets and extract their exact archive
         run: |
           directory="release/$RELEASE_VERSION"
@@ -172,12 +194,15 @@ jobs:
           else
             7z x 'artifacts/installer-payload/$PLUGINSDIR/app-64.7z' "-o$directory/win-unpacked" 'resources/app.asar'
           fi
+
       - name: Install and upgrade the actual Windows release
         if: inputs.verify_public_feed != true
         run: node scripts/verify-release-install.mjs
+
       - name: Verify the public update feed and installer download
         if: inputs.verify_public_feed == true
         run: node scripts/verify-github-update.mjs
+
       - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -187,32 +212,104 @@ jobs:
             artifacts/release-install/evidence.json
             artifacts/updates/github-smoke.json
           retention-days: 30
+
   publish:
     needs: [desktop, web]
     if: startsWith(github.ref, 'refs/tags/') || inputs.publish || inputs.upload_draft
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: '24.11.0'
           cache: npm
+
       - name: Install release verification dependencies
         run: npm ci --omit=dev --ignore-scripts --no-audit --no-fund
-      - name: Select version
-        run: echo "RELEASE_VERSION=$(node -p 'JSON.parse(require("fs").readFileSync("package.json")).version')" >> "$GITHUB_ENV"
+
+      - name: Select version and release tag
+        run: |
+          version=$(node -p 'JSON.parse(require("fs").readFileSync("package.json")).version')
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            tag="${GITHUB_REF#refs/tags/}"
+          else
+            tag="v$version"
+          fi
+
+          echo "RELEASE_TAG=$tag" >> "$GITHUB_ENV"
+
       - uses: actions/download-artifact@v4
         with:
           pattern: release-assets-*
           merge-multiple: true
           path: release/${{ env.RELEASE_VERSION }}
-      - name: Verify and upload both platforms
+
+      - name: Verify and publish GitHub Release
         env:
-          GH_TOKEN: ${{ secrets.RELEASES_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           PUBLISH_RELEASE: ${{ startsWith(github.ref, 'refs/tags/') || inputs.publish }}
+          UPLOAD_DRAFT: ${{ inputs.upload_draft }}
         run: |
-          test -n "$GH_TOKEN" || { echo 'Add RELEASES_TOKEN with Contents write access to styk-animate-releases.'; exit 1; }
           npm run release:verify
-          if [ "$PUBLISH_RELEASE" = true ]; then npm run release:publish -- --publish
-          else npm run release:publish; fi
+
+          directory="release/$RELEASE_VERSION"
+
+          # Collect only the distributable assets, not verification artifacts.
+          shopt -s nullglob
+          assets=(
+            "$directory"/latest*.yml
+            "$directory"/*.exe
+            "$directory"/*.blockmap
+            "$directory"/*.AppImage
+          )
+
+          if [ "${#assets[@]}" -eq 0 ]; then
+            echo "No release assets found in $directory"
+            exit 1
+          fi
+
+          tag="$RELEASE_TAG"
+          draft=false
+
+          if [ "$PUBLISH_RELEASE" != true ]; then
+            if [ "$UPLOAD_DRAFT" = true ]; then
+              draft=true
+            else
+              echo "Neither publishing nor draft upload was requested."
+              exit 1
+            fi
+          fi
+
+          repository="$GITHUB_REPOSITORY"
+
+          # Create the release if it doesn't exist; otherwise replace its assets.
+          if release_id=$(gh api "repos/$repository/releases/tags/$tag" --jq '.id' 2>/dev/null); then
+            echo "Updating existing release $tag (ID $release_id)"
+            gh release upload "$tag" "${assets[@]}" --clobber
+            gh api --method PATCH "repos/$repository/releases/$release_id" \
+              -F "draft=$draft" \
+              -F "name=$tag" \
+              -F "tag_name=$tag" >/dev/null
+          else
+            echo "Creating release $tag in $repository"
+            if [ "$draft" = true ]; then
+              gh release create "$tag" "${assets[@]}" \
+                --draft \
+                --title "$tag" \
+                --generate-notes \
+                --target "$GITHUB_SHA"
+            else
+              gh release create "$tag" "${assets[@]}" \
+                --title "$tag" \
+                --generate-notes \
+                --target "$GITHUB_SHA"
+            fi
+          fi
+
+          echo "Release: https://github.com/$repository/releases/tag/$tag"
